@@ -17,10 +17,11 @@ const (
 	baseURL  = "https://navi.cap.by"
 	loginURL = "https://navi.cap.by/api/v3/auth/login"
 
-	login    = "0069_test"
-	password = "101010"
+	login    = "test_cola"
+	password = "111111"
 
-	agentId = "947a60ea-3ccf-46c7-866a-42f6ab0ac793"
+	// agentId = "947a60ea-3ccf-46c7-866a-42f6ab0ac793"
+	agentId = "a2dcf51b-26d1-4c95-b9f3-292a2c099bd6"
 )
 
 type CreateRequest struct {
@@ -108,7 +109,9 @@ func (a *API) login() error {
 	})
 
 	log.Println("LOGIN OK")
-
+	log.Println("LOGIN RESPONSE TOKEN:", auth.AuthId)
+	log.Println("USING AGENT:", agentId)
+	log.Println("USER TOKEN:", a.token)
 	return nil
 }
 
@@ -231,4 +234,5 @@ func main() {
 
 	log.Println("Server started on port", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+
 }
