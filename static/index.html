@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Login</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="container">
+  <div class="card">
+    <h1>🚀 Geozone Tool</h1>
+
+    <input id="login" placeholder="Логин">
+    <input id="password" type="password" placeholder="Пароль">
+
+    <button onclick="doLogin()">Войти</button>
+
+    <div id="error"></div>
+  </div>
+</div>
+
+<script>
+function doLogin() {
+  const l = document.getElementById("login").value
+  const p = document.getElementById("password").value
+
+  if (!l || !p) {
+    document.getElementById("error").innerText = "Заполни поля"
+    return
+  }
+
+  if (l === "0069" && p === "101010") {
+    window.location.href = "app.html"
+  } else {
+    document.getElementById("error").innerText = "Неверный логин"
+  }
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Geozone</title>
+
+<link rel="stylesheet" href="styles.css">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+#map {
+  height: 240px;
+  width: 100%;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.success { color: #4caf50; }
+.error { color: #ff5252; }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <div class="card">
+    <h1>📍 Геозона</h1>
+
+    <div id="map"></div>
+
+    <input id="name" placeholder="Название">
+    <input id="lat" placeholder="Широта">
+    <input id="lon" placeholder="Долгота">
+    <input id="radius" placeholder="Радиус">
+
+    <button onclick="send()">Создать</button>
+
+    <div id="res"></div>
+  </div>
+</div>
+
+<script>
+const nameInput = document.getElementById("name");
+const latInput = document.getElementById("lat");
+const lonInput = document.getElementById("lon");
+const radiusInput = document.getElementById("radius");
+const resEl = document.getElementById("res");
+
+let map = L.map('map').setView([54.38, 25.81], 12);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap'
+}).addTo(map);
+
+let marker = null;
+let circle = null;
+
+function setPoint(lat, lon, updateInputs = false) {
+  if (isNaN(lat) || isNaN(lon)) return;
+
+  if (updateInputs) {
+    latInput.value = lat.toFixed(6);
+    lonInput.value = lon.toFixed(6);
+  }
+
+  if (marker) {
+    marker.setLatLng([lat, lon]);
+  } else {
+    marker = L.marker([lat, lon], { draggable: true }).addTo(map);
+
+    marker.on('dragend', () => {
+      const pos = marker.getLatLng();
+      setPoint(pos.lat, pos.lng, true);
+    });
+  }
+
+  map.setView([lat, lon], 15);
+  updateCircle();
+}
+
+map.on('click', (e) => {
+  setPoint(e.latlng.lat, e.latlng.lng, true);
+});
+
+function updateCircle() {
+  const lat = parseFloat(latInput.value);
+  const lon = parseFloat(lonInput.value);
+  const radius = parseFloat(radiusInput.value);
+
+  if (isNaN(lat) || isNaN(lon) || isNaN(radius)) return;
+
+  if (circle) {
+    circle.setLatLng([lat, lon]);
+    circle.setRadius(radius);
+  } else {
+    circle = L.circle([lat, lon], { radius }).addTo(map);
+  }
+}
+
+function tryUpdateFromInputs() {
+  const lat = parseFloat(latInput.value);
+  const lon = parseFloat(lonInput.value);
+
+  if (!isNaN(lat) && !isNaN(lon)) {
+    setPoint(lat, lon, false);
+  }
+}
+
+latInput.addEventListener("input", tryUpdateFromInputs);
+lonInput.addEventListener("input", tryUpdateFromInputs);
+radiusInput.addEventListener("input", updateCircle);
+
+async function send() {
+  const body = {
+    name: nameInput.value,
+    lat: parseFloat(latInput.value),
+    lon: parseFloat(lonInput.value),
+    radius: parseFloat(radiusInput.value)
+  };
+
+  try {
+    const r = await fetch("/create-geozone", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(body)
+    });
+
+    if (r.ok) {
+      resEl.className = "success";
+      resEl.innerText = "✅ Геозона создана";
+    } else {
+      resEl.className = "error";
+      resEl.innerText = "❌ Ошибка создания геозоны";
+    }
+
+  } catch (e) {
+    resEl.className = "error";
+    resEl.innerText = "❌ Ошибка соединения с сервером";
+  }
+}
+</script>
+
+</body>
+</html>
