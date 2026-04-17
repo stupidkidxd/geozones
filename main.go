@@ -216,7 +216,13 @@ func main() {
 	http.HandleFunc("/create-geozone", api.createGeozone)
 	http.HandleFunc("/health", health)
 
-	http.Handle("/", http.FileServer(http.Dir("./static")))
+	// static отдельно
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+
+	// root
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("API is running"))
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
