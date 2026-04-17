@@ -17,8 +17,8 @@ const (
 	baseURL  = "https://navi.cap.by"
 	loginURL = "https://navi.cap.by/api/v3/auth/login"
 
-	login    = "test_cola"
-	password = "111111"
+	login    = "0069_test"
+	password = "101010"
 
 	agentId = "947a60ea-3ccf-46c7-866a-42f6ab0ac793"
 )
