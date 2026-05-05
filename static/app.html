@@ -2,13 +2,10 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Geozone</title>
-
+<title>Geozone Tool</title>
 <link rel="stylesheet" href="styles.css">
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <style>
 #map {
   height: 240px;
@@ -16,81 +13,128 @@
   border-radius: 12px;
   margin-bottom: 12px;
 }
-
-.success { color: #4caf50; }
-.error { color: #ff5252; }
 </style>
 </head>
-
 <body>
 
 <div class="container">
   <div class="card">
     <h1>📍 Геозона</h1>
 
+    <!-- Свитчер (слева Создание / справа Редактирование) -->
+    <div class="switch-container">
+      <span class="mode-label">➕ Создание</span>
+      <label class="switch">
+        <input type="checkbox" id="modeSwitch">
+        <span class="slider"></span>
+      </label>
+      <span class="mode-label">✏️ Редактирование</span>
+    </div>
+
     <div id="map"></div>
 
-    <input id="name" placeholder="Название">
+    <!-- Поле "Название" + кнопка "Найти" (только в режиме редактирования) -->
+    <div id="searchWrapper" class="name-with-search" style="display: none;">
+      <input type="text" id="name" placeholder="Название геозоны">
+      <button id="searchBtn">Найти</button>
+    </div>
+
+    <!-- Обычное поле "Название" для режима создания (скрытое в режиме редактирования) -->
+    <input type="text" id="nameCreate" placeholder="Название" style="display: block;">
+
     <input id="lat" placeholder="Широта">
     <input id="lon" placeholder="Долгота">
-    <input id="radius" placeholder="Радиус">
+    <input id="radius" placeholder="Радиус (метры)">
 
-    <button onclick="send()">Создать</button>
-
+    <button id="actionBtn">Создать</button>
     <div id="res"></div>
+    <div id="loader" class="loader" style="display: none;">⏳ Загрузка списка геозон...</div>
   </div>
 </div>
 
 <script>
-const nameInput = document.getElementById("name");
+// Элементы
+const nameCreateInput = document.getElementById("nameCreate");
+const nameEditInput = document.getElementById("name");
 const latInput = document.getElementById("lat");
 const lonInput = document.getElementById("lon");
 const radiusInput = document.getElementById("radius");
 const resEl = document.getElementById("res");
+const modeSwitch = document.getElementById("modeSwitch");
+const actionBtn = document.getElementById("actionBtn");
+const searchWrapper = document.getElementById("searchWrapper");
+const searchBtn = document.getElementById("searchBtn");
+const loaderDiv = document.getElementById("loader");
 
 let map = L.map('map').setView([54.38, 25.81], 12);
-
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap'
 }).addTo(map);
 
 let marker = null;
 let circle = null;
+let currentMode = "create";
+let geozonesList = [];
+let geozonesLoaded = false;
 
+// Загрузка всех геозон
+async function loadAllGeozones(silent = false) {
+  if (!silent) {
+    loaderDiv.style.display = "block";
+    resEl.innerHTML = "";
+  }
+  try {
+    const resp = await fetch("/geozones");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    geozonesList = await resp.json();
+    geozonesLoaded = true;
+    loaderDiv.style.display = "none";
+    
+    if (currentMode === "edit" && !silent) {
+      resEl.className = "success";
+      resEl.innerText = `✅ Загружено ${geozonesList.length} геозон(ы)`;
+      setTimeout(() => {
+        if (resEl.innerText.includes("Загружено")) resEl.innerText = "";
+      }, 3000);
+    } else if (!silent && currentMode === "create") {
+      // в режиме создания не показываем сообщение о загрузке
+      if (resEl.innerText.includes("Загружено")) resEl.innerText = "";
+    }
+  } catch (err) {
+    loaderDiv.style.display = "none";
+    if (!silent) {
+      resEl.className = "error";
+      resEl.innerText = "❌ Ошибка загрузки списка геозон";
+    }
+    console.error(err);
+  }
+}
+
+// Карта
 function setPoint(lat, lon, updateInputs = false) {
   if (isNaN(lat) || isNaN(lon)) return;
-
   if (updateInputs) {
     latInput.value = lat.toFixed(6);
     lonInput.value = lon.toFixed(6);
   }
-
   if (marker) {
     marker.setLatLng([lat, lon]);
   } else {
     marker = L.marker([lat, lon], { draggable: true }).addTo(map);
-
     marker.on('dragend', () => {
       const pos = marker.getLatLng();
       setPoint(pos.lat, pos.lng, true);
     });
   }
-
   map.setView([lat, lon], 15);
   updateCircle();
 }
-
-map.on('click', (e) => {
-  setPoint(e.latlng.lat, e.latlng.lng, true);
-});
 
 function updateCircle() {
   const lat = parseFloat(latInput.value);
   const lon = parseFloat(lonInput.value);
   const radius = parseFloat(radiusInput.value);
-
   if (isNaN(lat) || isNaN(lon) || isNaN(radius)) return;
-
   if (circle) {
     circle.setLatLng([lat, lon]);
     circle.setRadius(radius);
@@ -102,44 +146,211 @@ function updateCircle() {
 function tryUpdateFromInputs() {
   const lat = parseFloat(latInput.value);
   const lon = parseFloat(lonInput.value);
-
-  if (!isNaN(lat) && !isNaN(lon)) {
-    setPoint(lat, lon, false);
-  }
+  if (!isNaN(lat) && !isNaN(lon)) setPoint(lat, lon, false);
 }
 
 latInput.addEventListener("input", tryUpdateFromInputs);
 lonInput.addEventListener("input", tryUpdateFromInputs);
 radiusInput.addEventListener("input", updateCircle);
 
+map.on('click', (e) => {
+  if (currentMode === "create") {
+    setPoint(e.latlng.lat, e.latlng.lng, true);
+  }
+});
+
+// Поиск по точному названию
+function findGeozoneByName(name) {
+  if (!geozonesLoaded || !name.trim()) return null;
+  const trimmed = name.trim();
+  return geozonesList.find(g => g.name.toLowerCase() === trimmed.toLowerCase());
+}
+
+function fillFormWithGeozone(geozone, showMessage = true) {
+  if (currentMode === "edit") {
+    nameEditInput.value = geozone.name;
+  } else {
+    nameCreateInput.value = geozone.name;
+  }
+  latInput.value = geozone.lat.toFixed(6);
+  lonInput.value = geozone.lon.toFixed(6);
+  radiusInput.value = geozone.radius;
+  setPoint(geozone.lat, geozone.lon, false);
+  updateCircle();
+  if (showMessage) {
+    resEl.className = "success";
+    resEl.innerText = `✅ Геозона "${geozone.name}" найдена. Можно редактировать.`;
+    setTimeout(() => {
+      if (resEl.innerText.includes("найдена")) resEl.innerText = "";
+    }, 4000);
+  }
+}
+
+function onSearch() {
+  if (!geozonesLoaded) {
+    resEl.className = "error";
+    resEl.innerText = "Список геозон ещё не загружен, подождите...";
+    return;
+  }
+  const query = nameEditInput.value;
+  if (!query.trim()) {
+    resEl.className = "error";
+    resEl.innerText = "Введите название геозоны для поиска";
+    return;
+  }
+  const found = findGeozoneByName(query);
+  if (found) {
+    fillFormWithGeozone(found, true);
+  } else {
+    resEl.className = "error";
+    resEl.innerText = `❌ Геозона "${query}" не найдена. Проверьте название.`;
+    nameEditInput.value = "";
+    latInput.value = "";
+    lonInput.value = "";
+    radiusInput.value = "";
+    if (marker) map.removeLayer(marker);
+    if (circle) map.removeLayer(circle);
+    marker = null; circle = null;
+    setTimeout(() => {
+      if (resEl.innerText.includes("не найдена")) resEl.innerText = "";
+    }, 3000);
+  }
+}
+
+// Переключение режимов
+function switchMode() {
+  const isEdit = modeSwitch.checked;
+  if (isEdit) {
+    currentMode = "edit";
+    actionBtn.innerText = "Обновить";
+    searchWrapper.style.display = "flex";
+    nameCreateInput.style.display = "none";
+    nameEditInput.value = "";
+    latInput.value = "";
+    lonInput.value = "";
+    radiusInput.value = "";
+    if (marker) map.removeLayer(marker);
+    if (circle) map.removeLayer(circle);
+    marker = null; circle = null;
+    resEl.innerText = "";
+    if (!geozonesLoaded) {
+      loadAllGeozones(false);
+    } else {
+      resEl.className = "success";
+      resEl.innerText = `✅ Загружено ${geozonesList.length} геозон(ы)`;
+      setTimeout(() => {
+        if (resEl.innerText.includes("Загружено")) resEl.innerText = "";
+      }, 3000);
+    }
+  } else {
+    currentMode = "create";
+    actionBtn.innerText = "Создать";
+    searchWrapper.style.display = "none";
+    nameCreateInput.style.display = "block";
+    nameCreateInput.value = "";
+    latInput.value = "";
+    lonInput.value = "";
+    radiusInput.value = "";
+    if (marker) map.removeLayer(marker);
+    if (circle) map.removeLayer(circle);
+    marker = null; circle = null;
+    resEl.innerText = "";
+  }
+}
+
+modeSwitch.addEventListener("change", switchMode);
+searchBtn.addEventListener("click", onSearch);
+nameEditInput.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") onSearch();
+});
+
+// Отправка (создать / обновить)
 async function send() {
-  const body = {
-    name: nameInput.value,
-    lat: parseFloat(latInput.value),
-    lon: parseFloat(lonInput.value),
-    radius: parseFloat(radiusInput.value)
-  };
+  let name;
+  if (currentMode === "create") {
+    name = nameCreateInput.value.trim();
+  } else {
+    name = nameEditInput.value.trim();
+  }
+  const lat = parseFloat(latInput.value);
+  const lon = parseFloat(lonInput.value);
+  const radius = parseFloat(radiusInput.value);
+  if (!name || isNaN(lat) || isNaN(lon) || isNaN(radius)) {
+    resEl.className = "error";
+    resEl.innerText = "❌ Заполните все поля корректно";
+    return;
+  }
+
+  const endpoint = currentMode === "create" ? "/create-geozone" : "/update-geozone";
+  let body;
+  if (currentMode === "create") {
+    body = { name, lat, lon, radius };
+  } else {
+    const selected = geozonesList.find(g => g.name.toLowerCase() === name.toLowerCase());
+    if (!selected) {
+      resEl.className = "error";
+      resEl.innerText = "❌ Не найден ID геозоны. Сначала найдите её через кнопку «Найти».";
+      return;
+    }
+    body = { id: selected.id, name, lat, lon, radius };
+  }
 
   try {
-    const r = await fetch("/create-geozone", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
+    const resp = await fetch(endpoint, {
+      method: currentMode === "create" ? "POST" : "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-
-    if (r.ok) {
-      resEl.className = "success";
-      resEl.innerText = "✅ Геозона создана";
+    if (resp.ok) {
+      if (currentMode === "create") {
+        resEl.className = "success";
+        resEl.innerText = `✅ Геозона "${name}" создана`;
+        nameCreateInput.value = "";
+        latInput.value = "";
+        lonInput.value = "";
+        radiusInput.value = "";
+        if (marker) map.removeLayer(marker);
+        if (circle) map.removeLayer(circle);
+        marker = null; circle = null;
+      } else {
+        // Режим редактирования
+        resEl.className = "success";
+        resEl.innerText = `✅ Геозона "${name}" обновлена`;
+        // Перезагружаем список в фоне
+        await loadAllGeozones(true);
+        // Обновляем форму, но без вывода сообщения "найдена"
+        const updated = geozonesList.find(g => g.id === body.id);
+        if (updated) {
+          // Обновляем поля без вызова fillFormWithGeozone
+          nameEditInput.value = updated.name;
+          latInput.value = updated.lat.toFixed(6);
+          lonInput.value = updated.lon.toFixed(6);
+          radiusInput.value = updated.radius;
+          setPoint(updated.lat, updated.lon, false);
+          updateCircle();
+        }
+      }
+      setTimeout(() => {
+        if (resEl.innerText.includes("создана") || resEl.innerText.includes("обновлена")) {
+          resEl.innerText = "";
+        }
+      }, 4000);
     } else {
+      const errText = await resp.text();
       resEl.className = "error";
-      resEl.innerText = "❌ Ошибка создания геозоны";
+      resEl.innerText = `❌ Ошибка: ${resp.status} ${errText}`;
     }
-
   } catch (e) {
     resEl.className = "error";
     resEl.innerText = "❌ Ошибка соединения с сервером";
   }
 }
+
+actionBtn.onclick = send;
+
+// Инициализация
+loadAllGeozones(true);
+switchMode();
 </script>
 
 </body>
